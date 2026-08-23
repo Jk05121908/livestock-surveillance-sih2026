@@ -113,18 +113,42 @@ serve(async (req) => {
     console.log(`[assign-case] Triggered for case ${caseId} | report_id: ${reportId}`);
 
     // Fetch report details for location (latitude, longitude, village, block)
-    let report: ReportLocation | null = null;
+    // Schema per supabase/schema.sql: reports has latitude/longitude + farmer_id (FK to farmers.village/block)
+    // and vets has village/block but no lat/lng — handle both shapes with fallback
+    let report: any = null;
     if (reportId) {
-      const { data, error } = await supabase.from('reports').select('id, latitude, longitude, village, block, animal_type, symptoms, farmer_name, farmer_phone').eq('id', reportId).single();
+      let { data, error } = await supabase.from('reports').select('id, latitude, longitude, village, block, farmer_id, animal_type, symptoms, farmer_name, farmer_phone').eq('id', reportId).single();
+      if (error && /column.*does not exist|does not exist/i.test(error.message)) {
+        console.warn(`[assign-case] Reports missing village/block cols, retrying without them:`, error.message);
+        const retry = await supabase.from('reports').select('id, latitude, longitude, farmer_id, animal_type, symptoms').eq('id', reportId).single();
+        data = retry.data as any;
+        error = retry.error as any;
+        if (!error && data?.farmer_id) {
+          const farmerRes = await supabase.from('farmers').select('village, block, name, phone').eq('id', data.farmer_id).single();
+          if (!farmerRes.error && farmerRes.data) {
+            data.village = (farmerRes.data as any).village;
+            data.block = (farmerRes.data as any).block;
+            data.farmer_name = (farmerRes.data as any).name;
+            data.farmer_phone = (farmerRes.data as any).phone;
+          }
+        }
+      } else if (!error && data && (data as any).farmer_id && (!(data as any).village || !(data as any).block)) {
+        // Enrich village/block from farmers if not directly on report
+        const farmerRes = await supabase.from('farmers').select('village, block, name, phone').eq('id', (data as any).farmer_id).single();
+        if (!farmerRes.error && farmerRes.data) {
+          (data as any).village = (data as any).village ?? (farmerRes.data as any).village;
+          (data as any).block = (data as any).block ?? (farmerRes.data as any).block;
+          (data as any).farmer_name = (data as any).farmer_name ?? (farmerRes.data as any).name;
+          (data as any).farmer_phone = (data as any).farmer_phone ?? (farmerRes.data as any).phone;
+        }
+      }
       if (error) {
         console.warn(`[assign-case] Could not fetch report ${reportId}:`, error.message);
-        // fallback to record embedded report
         report = body.report ?? record.report ?? null;
       } else {
         report = data as ReportLocation;
       }
     } else {
-      // No report_id, try embedded report location
       report = body.report ?? record.report ?? record;
     }
 

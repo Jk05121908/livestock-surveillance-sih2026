@@ -135,44 +135,80 @@ export default function VetDashboardPage() {
 
     setIsMock(false);
     try {
-      // Query cases where assigned_vet_id = current_vet_id, join report for details?
-      // Assuming `cases` has FK to `reports` with embedded report data or we fetch separately
-      // Try to fetch cases with report join: select *, reports(*)
-      const { data, error: fetchError } = await supabase
-        .from('cases')
-        .select(
-          `
+      // Query cases where assigned_vet_id = current_vet_id, join report for details
+      // Handles both schemas: extended (reports.village/farmer_name) and canonical supabase/schema.sql (reports->farmers via farmer_id)
+      let data: any[] | null = null;
+      // Try canonical schema first: reports via farmers join + cases without risk_level
+      let fetchError: any = null;
+      const attempt = async (selectStr: string) => {
+        const res = await supabase.from('cases').select(selectStr).eq('assigned_vet_id', vetId).order('created_at', { ascending: false });
+        return res;
+      };
+
+      // Attempt 1: extended schema (with reports.village, risk_level in cases)
+      let res = await attempt(`
           id, report_id, status, risk_level, assigned_vet_id, confirmed_disease, created_at, updated_at,
           reports (
-            animal_type, symptoms, photo_url, farmer_name, farmer_phone, village, block, latitude, longitude
+            animal_type, symptoms, photo_url, farmer_name, farmer_phone, village, block, latitude, longitude, farmer_id,
+            farmers ( name, phone, village, block )
           )
-        `
-        )
-        .eq('assigned_vet_id', vetId)
-        .order('created_at', { ascending: false });
+        `);
+      data = res.data as any;
+      fetchError = res.error;
+
+      // Fallback 1: if risk_level column missing in cases
+      if (fetchError && /risk_level|column.*does not exist/i.test(fetchError.message)) {
+        console.warn('[vet-dashboard] cases.risk_level missing, retry without it');
+        res = await attempt(`
+          id, report_id, status, assigned_vet_id, confirmed_disease, created_at, updated_at,
+          reports (
+            animal_type, symptoms, photo_url, farmer_name, farmer_phone, village, block, latitude, longitude, farmer_id,
+            farmers ( name, phone, village, block )
+          )
+        `);
+        data = res.data as any;
+        fetchError = res.error;
+      }
+      // Fallback 2: if reports.village/farmer_name columns missing (canonical schema)
+      if (fetchError && /village|farmer_name|column.*does not exist/i.test(fetchError.message)) {
+        console.warn('[vet-dashboard] reports village/farmer_name missing, retry with canonical schema');
+        res = await attempt(`
+          id, report_id, status, assigned_vet_id, confirmed_disease, created_at, updated_at,
+          reports (
+            animal_type, symptoms, photo_url, latitude, longitude, farmer_id,
+            farmers ( name, phone, village, block )
+          )
+        `);
+        data = res.data as any;
+        fetchError = res.error;
+      }
 
       if (fetchError) throw fetchError;
 
-      // Normalize to CaseData[]
-      const normalized: CaseData[] = (data || []).map((row: any) => ({
-        id: row.id,
-        report_id: row.report_id,
-        animal_type: row.reports?.animal_type ?? row.animal_type ?? 'unknown',
-        symptoms: Array.isArray(row.reports?.symptoms) ? row.reports.symptoms : Array.isArray(row.symptoms) ? row.symptoms : [],
-        photo_url: row.reports?.photo_url ?? row.photo_url ?? null,
-        farmer_name: row.reports?.farmer_name ?? row.farmer_name ?? null,
-        farmer_phone: row.reports?.farmer_phone ?? row.farmer_phone ?? null,
-        village: row.reports?.village ?? row.village ?? null,
-        block: row.reports?.block ?? row.block ?? null,
-        latitude: row.reports?.latitude ?? row.latitude ?? null,
-        longitude: row.reports?.longitude ?? row.longitude ?? null,
-        risk_level: row.risk_level ?? 'low',
-        status: row.status,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-        assigned_vet_id: row.assigned_vet_id,
-        confirmed_disease: row.confirmed_disease ?? null,
-      }));
+      // Normalize to CaseData[] — handles both report-direct and farmer-join shapes
+      const normalized: CaseData[] = (data || []).map((row: any) => {
+        const r = row.reports || {};
+        const f = r.farmers || {};
+        return {
+          id: row.id,
+          report_id: row.report_id,
+          animal_type: r.animal_type ?? row.animal_type ?? 'unknown',
+          symptoms: Array.isArray(r.symptoms) ? r.symptoms : Array.isArray(row.symptoms) ? row.symptoms : [],
+          photo_url: r.photo_url ?? row.photo_url ?? null,
+          farmer_name: r.farmer_name ?? f.name ?? row.farmer_name ?? null,
+          farmer_phone: r.farmer_phone ?? f.phone ?? row.farmer_phone ?? null,
+          village: r.village ?? f.village ?? row.village ?? null,
+          block: r.block ?? f.block ?? row.block ?? null,
+          latitude: r.latitude ?? row.latitude ?? null,
+          longitude: r.longitude ?? row.longitude ?? null,
+          risk_level: (row.risk_level ?? r.risk_level ?? 'low') as CaseData['risk_level'],
+          status: row.status,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          assigned_vet_id: row.assigned_vet_id,
+          confirmed_disease: row.confirmed_disease ?? null,
+        };
+      });
 
       setCases(normalized);
     } catch (err: any) {

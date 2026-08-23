@@ -113,9 +113,13 @@ serve(async (req) => {
     }
 
     // If HIGH risk: create row in cases table with status='pending'
+    // Note: schema supabase/schema.sql:44-53 has no risk_level column in cases — handle fallback
     let caseRow = null;
     if (result.risk_level === 'high') {
-      const { data, error: caseError } = await supabase
+      let data: any = null;
+      let caseError: any = null;
+      // Try with risk_level first (if column exists in extended schema), fallback without
+      const insertWithRisk = await supabase
         .from('cases')
         .insert({
           report_id: reportId,
@@ -126,7 +130,23 @@ serve(async (req) => {
         })
         .select()
         .single();
-
+      data = insertWithRisk.data;
+      caseError = insertWithRisk.error;
+      if (caseError && /risk_level|column.*does not exist/i.test(caseError.message)) {
+        console.warn('[triage-report] cases.risk_level column missing, retrying without it:', caseError.message);
+        const retry = await supabase
+          .from('cases')
+          .insert({
+            report_id: reportId,
+            status: 'pending',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+        data = retry.data;
+        caseError = retry.error;
+      }
       if (caseError) {
         console.error('[triage-report] Failed to create case for high-risk report:', caseError);
         throw caseError;
