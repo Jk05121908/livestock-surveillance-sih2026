@@ -34,7 +34,7 @@ export interface Farmer {
 
 export interface Report {
   id?: string;
-  farmer_id: string;
+  farmer_id: string | null;
   animal_type: AnimalType;
   symptoms: Symptom[];
   notes: string;

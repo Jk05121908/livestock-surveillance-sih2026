@@ -66,10 +66,16 @@ export type Vaccination = {
 
 export type Report = {
   id: string;
-  farmer_id: string;
-  village: string;
-  block: string;
-  district?: string;
+  farmer_id: string | null;
+  animal_type: string;
+  symptoms: unknown;
+  notes: string | null;
+  photo_url: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  risk_level?: string | null;
+  escalated?: boolean | null;
+  timestamp?: string;
   created_at?: string;
 };
 
@@ -90,9 +96,11 @@ export type Database = {
 
 function getEnv(name: string, fallback = ""): string {
   try {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore — Deno global
     if (typeof Deno !== "undefined" && Deno.env?.get) return Deno.env.get(name) || fallback;
   } catch {}
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   if (typeof process !== "undefined" && process.env?.[name]) return process.env[name] as string;
   return fallback;
