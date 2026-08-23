@@ -1,0 +1,21 @@
+# Env
+.env
+.env.local
+.env.*.local
+
+# Next.js
+.next/
+out/
+node_modules/
+dist/
+build/
+
+# Supabase
+.supabase/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
