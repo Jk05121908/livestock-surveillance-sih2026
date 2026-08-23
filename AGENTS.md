@@ -1,30 +1,58 @@
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
+
 # AGENTS.md — livestock-surveillance-sih2026
 
-> Keep this file high-signal. Every line should be something an agent would miss without help. Delete stale claims when the repo changes.
+> Every line = something an agent would miss without help. Keep it verified.
 
 ## Snapshot (verified 2026-08-23)
-- Empty starter repo — only `README.md:1` (`# livestock-surveillance-sih2026`) and `.git/`. Single commit `56e9468 Initial commit`.
-- Remote `origin` = `https://github.com/Jk05121908/livestock-surveillance-sih2026.git`, branch `main` tracks `origin/main`. No other branches.
-- No existing instructions: no `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md` — checked root + `.git` layout.
-- No manifests/config: no `package.json`, `pyproject.toml`, `go.mod`, `Dockerfile`, `Makefile`, lockfiles, or `opencode.json`/`opencode.jsonc` at repo root. Global `~/.config/opencode/opencode.jsonc:1-3` is empty (`{"$schema":...}` only).
-- No CI/lint/test/typecheck/codegen configured — no `.github/workflows`, no pre-commit, no task runner.
+- Stack: Next.js `16.3.2` (App Router), React `19.2.8`, TypeScript `^5`, Tailwind CSS `^4` via `@tailwindcss/postcss`, ESLint `^9` with `eslint-config-next`. Created via `npx create-next-app@latest . --typescript --tailwind --eslint --app --import-alias "@/*" --use-npm --disable-git`.
+- Remote `origin` `https://github.com/Jk05121908/livestock-surveillance-sih2026.git`, branch `main`. History: `56e9468 Initial commit` -> `cffa75b init: opencode agents context`.
+- Supabase: `@supabase/supabase-js` for `reports` table + Storage bucket `report-photos`. Env `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (client-side, see `lib/supabase.ts:1`).
+- No `src/`; code lives in `app/`, `components/`, `lib/`, `public/`.
 
-## Repo boundaries
-- No `src/` or packages yet. Treat repo as greenfield. When you scaffold, document real entrypoints and package boundaries here (e.g. `frontend/`, `backend/`, `ml/`).
-- Do not assume stack. Verify from manifests before running any build/test command.
+## Repo boundaries / entrypoints
+- `app/layout.tsx` — root layout, `next/font` Geist, language toggle via `LanguageContext` (`lib/language-context.tsx` if present) persisted to `localStorage`.
+- `app/page.tsx` — default landing, redirect/link to `/report`.
+- `app/report/page.tsx` — farmer disease reporting form (imports `components/ReportForm.tsx`).
+- `components/ReportForm.tsx` — all form logic: farmer profile (localStorage auto-save), animal/symptoms/notes/photo/GPS, offline queue, validation, Tailwind mobile-first UI, Hindi/English labels.
+- `lib/supabase.ts` — `createClient(url, anonKey)` — fails visibly if env missing.
+- `lib/types.ts` — `Farmer`, `Report`, `AnimalType`, `Symptom` etc.
+- `lib/offline-queue.ts` — `localStorage` queue for failed submissions, retry on load/online.
+- `lib/language-context.tsx` — language toggle provider (if added).
 
 ## Path quirk — space in parent
-- Absolute path is `/Users/kavyasingh/Documents/Default Project/livestock-surveillance-sih2026` — note `Default Project` has a space.
-- In bash tool use `workdir="/Users/kavyasingh/Documents/Default Project/livestock-surveillance-sih2026"` instead of `cd ... &&`. If you must inline, quote: `"/Users/kavyasingh/Documents/Default Project/..."`.
+- Absolute path contains space: `/Users/kavyasingh/Documents/Default Project/livestock-surveillance-sih2026`.
+- Bash tool: use `workdir="/Users/kavyasingh/Documents/Default Project/livestock-surveillance-sih2026"` not `cd ... &&`. Quote inline paths.
 
-## Commands
-- **None yet** — no build/test/lint scripts to run. After scaffolding, add *exact* verified commands here (e.g. `npm run dev`, single-test invocation) and required order (lint → typecheck → test).
-- Verifier: absence confirmed via `find . -maxdepth 4 -type f` (only `README.md` + `.git/*`) and `git log --stat` (1 file).
+## Commands (npm, not yarn/pnpm)
+- `npm run dev` — dev server at `http://localhost:3000` (Turbopack/next dev regenerates `AGENTS.md` header — don't remove the `BEGIN` block).
+- `npm run build` — production build + typecheck (runs `next build` which also generates route types).
+- `npm run lint` — `eslint` (config `eslint.config.mjs:1`).
+- `npm install @supabase/supabase-js` — add Supabase client (already in `package.json:11` after setup).
+- Single-file check: `npx tsc --noEmit --pretty` or `npx eslint app/report/page.tsx`.
 
-## Workflow gotchas
-- Do not add generic advice here. When you introduce tooling, replace this section with: env loading, generated code, migrations/codegen, dev servers, and deploy steps — only what `package.json`/`Makefile`/config actually defines.
-- Until CI exists, run `git status`/`git diff` before commit; push to `origin/main` (default branch). No protected-branch config observed.
+## Env & services
+- Create `.env.local` from `.env.example` (if present) with Supabase URL/anon key. Without it, `lib/supabase.ts` throws — app shows config error, photo/upload will fail and queue offline.
+- Storage bucket `report-photos` must exist and allow `insert` for anon (or RLS policy). Reports table columns: `farmer_id`, `animal_type`, `symptoms` (JSON array), `notes`, `photo_url`, `latitude`, `longitude`, `created_at`.
 
-## When you change the stack, update this file
-- Add: package manager + lockfile, entrypoints, and one-liner for focused verification (single test/file).
-- Remove: this "empty repo" snapshot once real code lands.
+## Conventions / gotchas
+- `components/ReportForm.tsx` is `"use client"` — uses `navigator.geolocation`, `localStorage`, `navigator.onLine`, `URL.createObjectURL` for preview. Must handle SSR guard (`typeof window !== "undefined"`).
+- Farmer profile auto-saves to `localStorage` key `farmer_profile` on every change; herd size is `number`.
+- GPS auto-captured on mount via `navigator.geolocation.getCurrentPosition`; on error show manual `latitude`/`longitude` inputs fallback. Show coords before submit.
+- Photo preview before upload, upload to `report-photos` with `storage.from(...).upload()`, retry button on failure.
+- Offline: if `!navigator.onLine` or Supabase insert/upload fails, `lib/offline-queue.ts` saves to `localStorage` key `offline_reports` (or `offline_queue`). On next load + `online` event, retry. Show offline indicator banner.
+- Language toggle: at least button labels in Hindi/English; persisted, mobile-first large buttons (see `app/layout.tsx`).
+- Don't run `create-next-app` again in `.` — it will conflict with existing `README.md`/`AGENTS.md`. Use manual file creation.
+- Generated: `.next/`, `node_modules/` — not committed. `next-env.d.ts:1` is generated, don't edit manually.
+
+## Workflow
+- Verify before commit: `npm run lint` then `npm run build` (build does typecheck).
+- Commit: `git add -A && git commit -m "..." && git push` to `origin/main`. Until CI, manual `git status`/`git diff`.
