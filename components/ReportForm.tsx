@@ -20,6 +20,7 @@ import {
 } from "@/lib/offline-queue";
 import { getAddressFromCoords } from "@/lib/geocoding";
 import { useLanguage } from "@/lib/language-context";
+import NotificationListener from "@/components/NotificationListener";
 
 const FARMER_KEY = "farmer_profile";
 
@@ -558,10 +559,13 @@ export default function ReportForm() {
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="w-full max-w-2xl mx-auto bg-white dark:bg-zinc-900 rounded-2xl shadow-lg p-4 sm:p-6 space-y-6"
-    >
+    <>
+      {/* Real-time outbreak alerts — uses farmer village/block to filter HIGH-risk cases */}
+      <NotificationListener farmerVillage={farmer.village} farmerBlock={farmer.block} />
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-2xl mx-auto bg-white dark:bg-zinc-900 rounded-2xl shadow-lg p-4 sm:p-6 space-y-6"
+      >
       {/* Offline indicator */}
       {!isOnline && (
         <div className="bg-amber-100 border border-amber-300 text-amber-900 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-100 rounded-xl p-3 text-center font-medium">
@@ -877,5 +881,6 @@ export default function ReportForm() {
         {lang === "hi" ? "बड़े बटन • मोबाइल-फ्रेंडली • ऑफलाइन सपोर्ट" : "Large buttons • Mobile-friendly • Offline support"}
       </p>
     </form>
+    </>
   );
 }
