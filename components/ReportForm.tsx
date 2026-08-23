@@ -18,6 +18,7 @@ import {
   fileToBase64,
   base64ToBlob,
 } from "@/lib/offline-queue";
+import { getAddressFromCoords } from "@/lib/geocoding";
 import { useLanguage } from "@/lib/language-context";
 
 const FARMER_KEY = "farmer_profile";
@@ -53,6 +54,8 @@ export default function ReportForm() {
   const [success, setSuccess] = useState<string | null>(null);
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
   const [queuedCount, setQueuedCount] = useState(0);
+  const [capturedAddress, setCapturedAddress] = useState<string | null>(null);
+  const [addrLoading, setAddrLoading] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -64,17 +67,36 @@ export default function ReportForm() {
     }
     setGpsStatus("loading");
     setGpsError(null);
+    setCapturedAddress(null);
+    setAddrLoading(false);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setLatitude(pos.coords.latitude);
-        setLongitude(pos.coords.longitude);
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setLatitude(lat);
+        setLongitude(lng);
         setGpsStatus("success");
-        console.log("[GPS] Captured:", pos.coords.latitude, pos.coords.longitude);
+        console.log("[GPS] Captured:", lat, lng);
+        // Reverse geocode - non-blocking, show loading then address
+        setAddrLoading(true);
+        setCapturedAddress(null);
+        getAddressFromCoords(lat, lng)
+          .then((addr) => {
+            console.log("[Geocoding] Address lookup result:", addr);
+            setCapturedAddress(addr);
+          })
+          .catch((e) => {
+            console.error("[Geocoding] Lookup failed:", e);
+            setCapturedAddress(null);
+          })
+          .finally(() => setAddrLoading(false));
       },
       (err) => {
         setGpsStatus("error");
         setGpsError(err.message);
         console.error("[GPS] Error:", err, err.message);
+        setAddrLoading(false);
+        setCapturedAddress(null);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
@@ -777,11 +799,20 @@ export default function ReportForm() {
 
           {gpsStatus === "loading" && <p className="text-sm text-blue-600 dark:text-blue-400">{t("gpsCapturing")}</p>}
           {gpsStatus === "success" && latitude !== null && longitude !== null && (
-            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3">
+            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 space-y-2">
               <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">{t("gpsSuccess")}</p>
               <p className="text-sm font-mono text-zinc-700 dark:text-zinc-300">
-                {latitude.toFixed(6)}, {longitude.toFixed(6)}
+                GPS: {latitude.toFixed(6)}, {longitude.toFixed(6)}
               </p>
+              {addrLoading && <p className="text-sm text-blue-600 dark:text-blue-400">Looking up location...</p>}
+              {!addrLoading && capturedAddress && (
+                <p className="text-sm text-zinc-700 dark:text-zinc-300">
+                  Address: <span className="font-medium">{capturedAddress}</span>
+                </p>
+              )}
+              {!addrLoading && !capturedAddress && (
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">Address lookup failed — showing coordinates only</p>
+              )}
             </div>
           )}
           {gpsStatus === "error" && (
