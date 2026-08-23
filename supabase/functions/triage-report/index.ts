@@ -90,8 +90,104 @@ serve(async (req) => {
 
     console.log(`[triage-report] Triaging report ${reportId} | animal: ${animal_type} | symptoms:`, symptoms);
 
-    const result = triage(symptoms, animal_type);
-    console.log(`[triage-report] Result for ${reportId}:`, result);
+    let result = triage(symptoms, animal_type);
+    console.log(`[triage-report] Initial triage for ${reportId}:`, result);
+
+    // -----------------------------------------------------------------------
+    // Vaccination coverage integration (SPEC: Member 2 <-> Member 3)
+    // If coverage <60% AND risk_level == 'low' => bump to 'medium' and append reasoning
+    // Village is resolved via reports.farmer_id -> farmers.village (canonical schema)
+    //   or directly via reports.village if extended schema has it
+    // -----------------------------------------------------------------------
+    try {
+      // Resolve village for this report
+      let village: string | null = (record as { village?: string }).village ?? (record as { block?: string }).village ?? null;
+      let farmerId: string | null = (record as { farmer_id?: string }).farmer_id ?? null;
+
+      // If village not on report, look up via farmers table
+      if (!village && farmerId) {
+        const { data: farmer, error: farmerErr } = await supabase.from('farmers').select('village, block').eq('id', farmerId).maybeSingle();
+        if (!farmerErr && farmer) {
+          village = (farmer as { village: string }).village;
+        }
+      } else if (!village && !farmerId) {
+        // Fallback: fetch report row to get farmer_id, then lookup village
+        const { data: reportRow } = await supabase.from('reports').select('farmer_id').eq('id', reportId).maybeSingle();
+        const fid = (reportRow as { farmer_id?: string } | null)?.farmer_id;
+        if (fid) {
+          const { data: farmer } = await supabase.from('farmers').select('village, block').eq('id', fid).maybeSingle();
+          if (farmer) village = (farmer as { village: string }).village;
+          farmerId = fid;
+        }
+      }
+
+      if (village) {
+        console.log(`[triage-report] Checking vaccination coverage for village: ${village}`);
+
+        // Helper: detect missing column error to choose join strategy
+        const isMissingCol = (e: unknown) => {
+          const m = String((e as { message?: string })?.message || e || "").toLowerCase();
+          return m.includes("does not exist") || m.includes("column") || m.includes("42703") || m.includes("could not find");
+        };
+
+        // Build farmer->village map for fallback
+        const buildFarmerMap = async () => {
+          const { data, error } = await supabase.from('farmers').select('id, village');
+          if (error) throw error;
+          const m = new Map<string, string>();
+          for (const r of (data as { id: string; village: string }[] | null) || []) m.set(r.id, r.village);
+          return m;
+        };
+
+        const distinctCount = async (table: string, vill: string): Promise<number> => {
+          // Try direct village column first
+          const { data, error } = await supabase.from(table).select('farmer_id').eq('village', vill);
+          if (!error) {
+            if (!data || data.length === 0) return 0;
+            return new Set((data as { farmer_id: string }[]).map((r) => r.farmer_id)).size;
+          }
+          if (!isMissingCol(error)) throw error;
+          // Fallback via farmers
+          const [rows, farmerMap] = await Promise.all([
+            supabase.from(table).select('farmer_id'),
+            buildFarmerMap(),
+          ]);
+          if (rows.error) throw rows.error;
+          const filtered = ((rows.data as { farmer_id: string }[] | null) || []).filter((r) => farmerMap.get(r.farmer_id) === vill);
+          return new Set(filtered.map((r) => r.farmer_id)).size;
+        };
+
+        const [vaccinated, total] = await Promise.all([
+          distinctCount('vaccinations', village),
+          distinctCount('reports', village),
+        ]);
+
+        const coverage = total === 0 ? 0 : Math.round((vaccinated / total) * 100 * 10) / 10;
+        console.log(`[triage-report] Coverage for ${village}: ${vaccinated}/${total} = ${coverage}%`);
+
+        if (coverage < 60 && result.risk_level === 'low') {
+          const prev = result.risk_level;
+          result = {
+            ...result,
+            risk_level: 'medium',
+            reasoning: `${result.reasoning} Low vaccination coverage in ${village} (${coverage}% — ${vaccinated}/${total} farmers) elevates risk.`,
+          };
+          console.log(`[triage-report] Coverage bump: ${prev} -> ${result.risk_level} due to low coverage (${coverage}% < 60%)`);
+        } else if (coverage < 60) {
+          result = {
+            ...result,
+            reasoning: `${result.reasoning} Note: low vaccination coverage in ${village} (${coverage}%) — area is under-vaccinated.`,
+          };
+          console.log(`[triage-report] Low coverage note added (${coverage}%) — risk remains ${result.risk_level}`);
+        }
+      } else {
+        console.log(`[triage-report] Could not resolve village for coverage check — skipping bump`);
+      }
+    } catch (covErr) {
+      console.warn('[triage-report] Coverage check failed (fail-open, keeping original triage):', covErr);
+    }
+
+    console.log(`[triage-report] Final result for ${reportId}:`, result);
 
     // Update report.risk_level (and optional confidence/reasoning columns if they exist)
     const updatePayload: Record<string, unknown> = {
