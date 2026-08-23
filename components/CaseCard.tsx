@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { getAddressFromCoords } from '../lib/geocoding';
 
 export interface CaseData {
   id: string;
@@ -45,6 +46,37 @@ export default function CaseCard({ caseData, onStatusChange }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
   const [showConfirmInput, setShowConfirmInput] = useState(false);
   const [diseaseInput, setDiseaseInput] = useState(caseData.confirmed_disease || '');
+
+  // Reverse-geocoded address (display full address, not just coordinates)
+  const [address, setAddress] = useState<string | null>(null);
+  const [addrLoading, setAddrLoading] = useState(false);
+
+  useEffect(() => {
+    const lat = caseData.latitude;
+    const lng = caseData.longitude;
+    if (lat == null || lng == null) return;
+    // Don't fetch if coordinates are obviously invalid / 0
+    if (typeof lat !== 'number' || typeof lng !== 'number') return;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAddrLoading(true);
+    getAddressFromCoords(lat, lng)
+      .then((res) => {
+        if (cancelled) return;
+        if (res) setAddress(res);
+      })
+      .catch(() => {
+        // Fail gracefully — keep coordinates only (spec: don't block card)
+      })
+      .finally(() => {
+        if (!cancelled) setAddrLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [caseData.latitude, caseData.longitude]);
 
   const handleAction = async (status: string, disease?: string | null) => {
     try {
@@ -100,18 +132,28 @@ export default function CaseCard({ caseData, onStatusChange }: Props) {
         </div>
         <div>
           <p className="text-gray-500 text-xs uppercase tracking-wide">Location</p>
-          <p className="font-medium">
-            {caseData.village || 'Unknown village'}
-            {caseData.block ? `, ${caseData.block}` : ''}
-          </p>
-          {caseData.latitude && caseData.longitude && (
+          {/* Reverse-geocoded address — prominent, falls back to village/block */}
+          {addrLoading ? (
+            <p className="font-medium text-gray-400 text-sm animate-pulse">Loading address...</p>
+          ) : address ? (
+            <p className="font-medium text-sm leading-tight" title={address}>
+              {address}
+            </p>
+          ) : (
+            <p className="font-medium">
+              {caseData.village || 'Unknown village'}
+              {caseData.block ? `, ${caseData.block}` : ''}
+            </p>
+          )}
+          {caseData.latitude != null && caseData.longitude != null && (
             <a
               href={`https://maps.google.com/?q=${caseData.latitude},${caseData.longitude}`}
               target="_blank"
               rel="noreferrer"
-              className="text-xs text-blue-600 hover:underline"
+              className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1 mt-0.5"
             >
-              {caseData.latitude.toFixed(4)}, {caseData.longitude.toFixed(4)} ↗
+              {Number(caseData.latitude).toFixed(4)}, {Number(caseData.longitude).toFixed(4)} ↗
+              <span className="text-gray-400">[view on map]</span>
             </a>
           )}
         </div>

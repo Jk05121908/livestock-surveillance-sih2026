@@ -96,13 +96,11 @@ export type Database = {
 
 function getEnv(name: string, fallback = ""): string {
   try {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore — Deno global
-    if (typeof Deno !== "undefined" && Deno.env?.get) return Deno.env.get(name) || fallback;
+    const deno = (globalThis as unknown as { Deno?: { env?: { get?: (k: string) => string } } }).Deno;
+    if (deno?.env?.get) return deno.env.get(name) || fallback;
   } catch {}
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  if (typeof process !== "undefined" && process.env?.[name]) return process.env[name] as string;
+  const proc = (globalThis as unknown as { process?: { env?: Record<string, string> } }).process;
+  if (proc?.env?.[name]) return proc.env[name] as string;
   return fallback;
 }
 

@@ -1,0 +1,66 @@
+[
+  {
+    "id": "00001388-0000-4000-a000-beef000000001388",
+    "name": "Dr. Sandeep Gaikwad",
+    "phone": "+917442529497",
+    "village": "Kolhewadi",
+    "block": "Sangamner",
+    "specialization": "Large Animal Medicine"
+  },
+  {
+    "id": "00001389-0000-4000-a000-beef000000001389",
+    "name": "Dr. Anjali Mane",
+    "phone": "+919613039701",
+    "village": "Hiware Bazar",
+    "block": "Parner",
+    "specialization": "Large Animal Medicine"
+  },
+  {
+    "id": "0000138a-0000-4000-a000-beef00000000138a",
+    "name": "Dr. Rajesh Pawar",
+    "phone": "+919907242209",
+    "village": "Ralegan Siddhi",
+    "block": "Parner",
+    "specialization": "Large Animal Medicine"
+  },
+  {
+    "id": "0000138b-0000-4000-a000-beef00000000138b",
+    "name": "Dr. Kavita Patil",
+    "phone": "+918552436279",
+    "village": "Shani Shingnapur",
+    "block": "Nevasa",
+    "specialization": "Preventive Medicine"
+  },
+  {
+    "id": "0000138c-0000-4000-a000-beef00000000138c",
+    "name": "Dr. Vikram Kulkarni",
+    "phone": "+917966406371",
+    "village": "Takali Dhokeshwar",
+    "block": "Parner",
+    "specialization": "Preventive Medicine"
+  },
+  {
+    "id": "0000138d-0000-4000-a000-beef00000000138d",
+    "name": "Dr. Priya Mane",
+    "phone": "+917624903438",
+    "village": "Kolhewadi",
+    "block": "Sangamner",
+    "specialization": "Veterinary Epidemiology"
+  },
+  {
+    "id": "0000138e-0000-4000-a000-beef00000000138e",
+    "name": "Dr. Vikram Kulkarni",
+    "phone": "+918976554473",
+    "village": "Hiware Bazar",
+    "block": "Parner",
+    "specialization": "Veterinary Epidemiology"
+  },
+  {
+    "id": "0000138f-0000-4000-a000-beef00000000138f",
+    "name": "Dr. Sandeep Kadam",
+    "phone": "+918964344336",
+    "village": "Ralegan Siddhi",
+    "block": "Parner",
+    "specialization": "Preventive Medicine"
+  }
+]
