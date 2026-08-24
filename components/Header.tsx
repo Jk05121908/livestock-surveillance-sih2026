@@ -17,6 +17,12 @@ export default function Header() {
         </Link>
         <div className="flex items-center gap-2">
           <Link
+            href="/dashboard"
+            className="hidden sm:inline-flex bg-slate-900 text-white px-4 py-2 rounded-full text-sm font-semibold hover:bg-black"
+          >
+            Dashboard
+          </Link>
+          <Link
             href="/report"
             className="bg-emerald-600 text-white px-4 py-2 rounded-full text-sm font-semibold hover:bg-emerald-700"
           >
